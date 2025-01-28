@@ -4,129 +4,98 @@ from typing import List, Tuple, Dict
 
 class ArabicSyllableAnalyzer:
     def __init__(self):
-        # Essential Arabic character sets
+        # Define character sets
         self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
         self.long_vowels = set('اوي')
-        self.short_vowels = set('َُِ')  # Fatha, Damma, Kasra
-        self.tanwin = set('ًٌٍ')  # Tanwin forms
+        self.short_vowels = 'َُِ'  # Fatha, Damma, Kasra
         self.sukun = 'ْ'
         self.shadda = 'ّ'
+        self.tanwin = 'ًٌٍ'
         
         # Meters with their patterns
         self.meters = {
-            'الطويل': 'VSVS VVSVS VSVS VVSVS',
-            'المديد': 'VSVVS VSV VSVVS',
-            'البسيط': 'VSSVS VSV VSSVS VSV',
-            'الوافر': 'VVSVS VVSVS VSV',
-            'الكامل': 'VVVVS VVVVS VVVVS',
-            'الهزج': 'VVSVS VVSVS',
-            'الرجز': 'VSSVS VSSVS VSSVS',
-            'الرمل': 'VSVVS VSVVS VSVVS'
+            'الطويل': 'VSVS VVSVS VSVS VVSVS'
         }
-        
+
     def analyze_syllables(self, text: str) -> List[Dict]:
-        """
-        Analyze text into syllables with detailed debugging information.
-        Returns list of syllables with their properties.
-        """
-        syllables = []
+        """Analyze text into syllables with detailed tracking."""
+        result = []
         i = 0
-        debug_info = []
+        debug = []
         
         while i < len(text):
-            if not text[i] in self.consonants:
+            if text[i] not in self.consonants:
                 i += 1
                 continue
                 
-            # Start of potential syllable
-            syllable_start = i
+            # Start of syllable
+            start = i
+            syllable = {'text': '', 'type': '', 'debug': ''}
             consonant = text[i]
             i += 1
             
-            # Look for vowel marks
-            vowel_mark = ''
+            # Look for vowel
             if i < len(text) and text[i] in self.short_vowels:
-                vowel_mark = text[i]
+                vowel = text[i]
                 i += 1
-            
-            # Look ahead for potential syllable endings
-            syllable_type = ''
-            next_char = text[i] if i < len(text) else ''
-            
-            if vowel_mark:  # We have a valid syllable start (CV)
-                if next_char in self.long_vowels:  # CVV
-                    syllable_type = 'S'  # ساكن
-                    i += 1
-                elif next_char == self.sukun:  # CVC
-                    syllable_type = 'S'  # ساكن
-                    i += 1
-                elif next_char == self.shadda:  # CVCC
-                    syllable_type = 'S'  # ساكن
-                    i += 1
-                else:  # CV
-                    syllable_type = 'V'  # متحرك
                 
-                syllable_info = {
-                    'text': text[syllable_start:i],
-                    'type': syllable_type,
-                    'consonant': consonant,
-                    'vowel_mark': vowel_mark,
-                    'ending': next_char if syllable_type == 'S' else ''
-                }
-                syllables.append(syllable_info)
-                debug_info.append(f"{syllable_info['text']}({syllable_info['type']})")
+                # Look ahead for syllable closure
+                if i < len(text):
+                    if text[i] in self.long_vowels:  # CVV
+                        syllable['type'] = 'S'
+                        syllable['text'] = text[start:i+1]
+                        syllable['debug'] = f"CVV: {consonant}+{vowel}+{text[i]}"
+                        i += 1
+                    elif text[i] == self.sukun:  # CVC
+                        syllable['type'] = 'S'
+                        syllable['text'] = text[start:i+1]
+                        syllable['debug'] = f"CVC: {consonant}+{vowel}+sukun"
+                        i += 1
+                    elif text[i] == self.shadda:  # CVCC
+                        syllable['type'] = 'S'
+                        syllable['text'] = text[start:i+1]
+                        syllable['debug'] = f"CVCC: {consonant}+{vowel}+shadda"
+                        i += 1
+                    else:  # CV
+                        syllable['type'] = 'V'
+                        syllable['text'] = text[start:i]
+                        syllable['debug'] = f"CV: {consonant}+{vowel}"
+                
+                if syllable['type']:  # Valid syllable found
+                    result.append(syllable)
+                    debug.append(f"{syllable['text']}({syllable['type']}-{syllable['debug']})")
             
-        return syllables, debug_info
+        return result, debug
 
     def get_pattern(self, text: str) -> Tuple[str, List[str]]:
-        """Get meter pattern from text with debugging info."""
-        syllables, debug_info = self.analyze_syllables(text)
-        pattern = ''.join(s['type'] for s in syllables)
+        """Convert text to meter pattern with debugging info."""
+        syllables, debug = self.analyze_syllables(text)
         
-        # Insert spaces to group into feet
-        segmented_pattern = ''
-        for i, char in enumerate(pattern):
-            segmented_pattern += char
-            if (i + 1) % 4 == 0 and i < len(pattern) - 1:
-                segmented_pattern += ' '
-                
-        return segmented_pattern, debug_info
-
-    def find_meter(self, pattern: str) -> List[Tuple[str, float]]:
-        """Find matching meters for pattern."""
-        matches = []
-        pattern_no_spaces = pattern.replace(' ', '')
+        # Build pattern with proper spacing between feet
+        pattern = ''
+        for i, syl in enumerate(syllables):
+            pattern += syl['type']
+            # Add space every 4 syllables
+            if (i + 1) % 4 == 0 and i < len(syllables) - 1:
+                pattern += ' '
         
-        for meter, meter_pattern in self.meters.items():
-            meter_no_spaces = meter_pattern.replace(' ', '')
-            if len(pattern_no_spaces) > len(meter_no_spaces) * 0.5:  # Only check if lengths are somewhat similar
-                similarity = self.calculate_similarity(pattern_no_spaces, meter_no_spaces)
-                if similarity > 0.8:
-                    matches.append((meter, similarity))
-        
-        return sorted(matches, key=lambda x: x[1], reverse=True)
-    
-    def calculate_similarity(self, p1: str, p2: str) -> float:
-        """Calculate similarity between two patterns."""
-        max_len = max(len(p1), len(p2))
-        min_len = min(len(p1), len(p2))
-        matches = sum(1 for i in range(min_len) if p1[i] == p2[i])
-        return matches / max_len
+        return pattern, debug
 
 def main():
     st.title("Arabic Meter Analyzer محلل البحور الشعرية")
     
     st.markdown("""
-    ### Input Requirements متطلبات الإدخال
-    - Full diacritical marks (تشكيل كامل)
-    - Enter a single line
-    - Include all harakat (حركات)
+    ### Test with: قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِ
+    Make sure to include all diacritical marks:
+    - Short vowels (فتحة/ضمة/كسرة): َ ُ ِ
+    - Sukun: ْ
+    - Long vowels (حروف المد): ا و ي
     """)
     
     # Text input
     text = st.text_input(
         "Enter Arabic poetry line:",
-        value="قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيبٍ وَمَنْزِلِ"
+        value="قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِ"
     )
     
     analyzer = ArabicSyllableAnalyzer()
@@ -136,35 +105,19 @@ def main():
             st.error("Please enter text")
             return
             
-        # Get pattern with debugging info
+        # Get pattern with debugging
         pattern, debug_info = analyzer.get_pattern(text)
         
         # Show detailed analysis
-        st.subheader("Detailed Analysis التحليل المفصل")
+        st.subheader("Syllable Analysis تحليل المقاطع")
+        for d in debug_info:
+            st.write(d)
+            
+        st.subheader("Detected Pattern النمط المكتشف")
+        st.write(pattern)
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**Syllable Breakdown تقطيع المقاطع**")
-            for syllable in debug_info:
-                st.write(syllable)
-                
-        with col2:
-            st.write("**Detected Pattern النمط المكتشف**")
-            st.write(pattern)
-        
-        # Find matching meters
-        matches = analyzer.find_meter(pattern)
-        
-        if matches:
-            st.success("Matching Meters البحور المطابقة")
-            for meter, confidence in matches:
-                st.write(f"- {meter} ({confidence*100:.1f}%)")
-                st.write(f"  Expected: {analyzer.meters[meter]}")
-                st.write(f"  Detected: {pattern}")
-        else:
-            st.warning("No matching meter found")
-            st.write("Detected pattern:", pattern)
+        st.subheader("Expected Pattern for الطويل")
+        st.write("VSVS VVSVS VSVS VVSVS")
 
 if __name__ == "__main__":
     main()
