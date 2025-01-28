@@ -10,7 +10,7 @@ def analyze_bahr(poem):
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are an expert in Arabic prosody (علم العروض). Analyze the following verse and think it out then respond ONLY with the Arabic name of the Bahr in bold. If the verse doesn't match any Bahr, respond with 'NO_MATCH'. Format: **بحر name** or NO_MATCH"},
+                {"role": "system", "content": "You are an expert in Arabic prosody (علم العروض). Analyze the following verse and think it out then respond with the Arabic name of the Bahr in bold. If the verse doesn't match any Bahr, respond with 'NO_MATCH'. Format: **بحر name** or NO_MATCH"},
                 {"role": "user", "content": poem}
             ],
             temperature=0.1
