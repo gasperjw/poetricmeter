@@ -5,6 +5,7 @@ from typing import List, Tuple
 class ArabicMeterAnalyzer:
     def __init__(self):
         # Character sets
+        self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
         self.short_vowels = set('َُِ')      # Fatha, Damma, Kasra
         self.long_vowels = set('اوي')       # Alif, Waw, Ya
         self.sukun = 'ْ'
@@ -13,93 +14,87 @@ class ArabicMeterAnalyzer:
         
     def get_syllables(self, text: str) -> List[Tuple[str, str, str]]:
         """
-        Break text into syllables, returning each with its pattern and reason.
-        Returns: List of (syllable_text, pattern, reason)
+        Break text into syllables, following Arabic prosody rules strictly.
+        Each syllable must start with a consonant + vowel.
         """
         syllables = []
-        text = ' '.join(text.split())  # Normalize spaces
+        chars = list(text)  # Convert to list for easier handling
         i = 0
         
-        while i < len(text):
-            # Skip spaces
-            if text[i].isspace():
+        while i < len(chars):
+            # Skip non-consonants at start
+            if chars[i] not in self.consonants:
                 i += 1
                 continue
-                
-            # Find next short vowel
-            vowel_pos = -1
-            for j in range(i+1, min(i+4, len(text))):
-                if text[j] in self.short_vowels:
-                    vowel_pos = j
-                    break
             
-            if vowel_pos == -1:  # No vowel found
+            start = i
+            consonant = chars[i]
+            i += 1
+            
+            # Look for vowel
+            if i < len(chars) and chars[i] in self.short_vowels:
+                vowel = chars[i]
                 i += 1
-                continue
                 
-            # Look at what follows the vowel
-            next_pos = vowel_pos + 1
-            if next_pos < len(text):
-                if text[next_pos] in self.long_vowels:  # CVV
+                # Now check what closes the syllable
+                if i < len(chars):
+                    if chars[i] in self.long_vowels:  # CVV like فا
+                        syllables.append((
+                            ''.join(chars[start:i+1]),
+                            'S',
+                            f'CVV: {consonant}{vowel}{chars[i]}'
+                        ))
+                        i += 1
+                    elif chars[i] == self.sukun:  # CVC like مِنْ
+                        syllables.append((
+                            ''.join(chars[start:i+1]),
+                            'S',
+                            f'CVC: {consonant}{vowel}{self.sukun}'
+                        ))
+                        i += 1
+                    elif chars[i] in self.tanwin:  # CVN like بٍ
+                        syllables.append((
+                            ''.join(chars[start:i+1]),
+                            'S',
+                            f'CVN: {consonant}{vowel}{chars[i]}'
+                        ))
+                        i += 1
+                    elif chars[i] == self.shadda:  # CVCC like شَدّ
+                        syllables.append((
+                            ''.join(chars[start:i+1]),
+                            'S',
+                            f'CVCC: {consonant}{vowel}{self.shadda}'
+                        ))
+                        i += 1
+                    else:  # CV like بِ
+                        syllables.append((
+                            ''.join(chars[start:i]),
+                            'V',
+                            f'CV: {consonant}{vowel}'
+                        ))
+                else:  # End of text
                     syllables.append((
-                        text[i:next_pos+1],
-                        'S',
-                        f'Closed by long vowel {text[next_pos]}'
-                    ))
-                    i = next_pos + 1
-                elif text[next_pos] == self.sukun:  # CVC
-                    syllables.append((
-                        text[i:next_pos+1],
-                        'S',
-                        'Closed by sukun'
-                    ))
-                    i = next_pos + 1
-                elif text[next_pos] == self.shadda:  # CVCC
-                    syllables.append((
-                        text[i:next_pos+1],
-                        'S',
-                        'Closed by shadda'
-                    ))
-                    i = next_pos + 1
-                elif text[next_pos] in self.tanwin:  # CV + tanwin
-                    syllables.append((
-                        text[i:next_pos+1],
-                        'S',
-                        'Closed by tanwin'
-                    ))
-                    i = next_pos + 1
-                else:  # CV
-                    syllables.append((
-                        text[i:vowel_pos+1],
+                        ''.join(chars[start:i]),
                         'V',
-                        'Open syllable'
+                        f'CV: {consonant}{vowel}'
                     ))
-                    i = vowel_pos + 1
-            else:  # End of text, must be CV
-                syllables.append((
-                    text[i:vowel_pos+1],
-                    'V',
-                    'Open syllable at end'
-                ))
-                i = vowel_pos + 1
-                
+                    
         return syllables
 
 def main():
     st.title("Arabic Meter Analyzer محلل البحور الشعرية")
     
-    # Example text
     example = "قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِ"
     
     st.markdown(f"""
-    ### Test with this line:
-    {example}
+    ### Instructions التعليمات
+    Each syllable must include:
+    - Consonant (حرف صحيح)
+    - Short vowel (حركة: َُِ)
+    - Optional ending: long vowel (ا و ي) / sukun (ْ) / tanwin (ًٌٍ)
     
-    Make sure all marks are included:
-    - Short vowels (فتحة/ضمة/كسرة): َ ُ ِ
-    - Sukun: ْ
-    - Long vowels (حروف المد): ا و ي
-    - Tanwin: ً ٌ ٍ
+    Test line:
+    {example}
     """)
     
     # Text input
@@ -118,24 +113,33 @@ def main():
         # Analyze syllables
         syllables = analyzer.get_syllables(text)
         
-        # Show detailed analysis
-        st.subheader("Syllable Analysis تحليل المقاطع")
-        
-        # Display syllables in a table
-        st.write("| Syllable | Pattern | Reason |")
-        st.write("|----------|---------|---------|")
+        # Show analysis in table
+        st.markdown("### Syllable Analysis تحليل المقاطع")
+        st.markdown("| Syllable | Pattern | Type |")
+        st.markdown("|----------|---------|------|")
         for syl, pat, reason in syllables:
-            st.write(f"| {syl} | {pat} | {reason} |")
+            st.markdown(f"| {syl} | {pat} | {reason} |")
         
-        # Show final pattern
+        # Show pattern
         pattern = ''.join(p for _, p, _ in syllables)
-        segmented_pattern = ' '.join(pattern[i:i+4] for i in range(0, len(pattern), 4))
         
-        st.subheader("Detected Pattern النمط المكتشف")
+        # Group into feet (every 2 syllables for taf'ilat)
+        feet = []
+        for i in range(0, len(pattern), 4):
+            feet.append(pattern[i:i+4])
+        segmented_pattern = ' '.join(feet)
+        
+        st.markdown("### Detected Pattern النمط المكتشف")
         st.write(segmented_pattern)
         
-        st.subheader("Expected Pattern (الطويل)")
+        # Compare with expected
+        st.markdown("### Expected Pattern (الطويل)")
         st.write("VSVS VVSVS VSVS VVSVS")
+        
+        # Detailed breakdown
+        st.markdown("### Foot Analysis تحليل التفعيلات")
+        for i, foot in enumerate(feet, 1):
+            st.write(f"Foot {i}: {foot}")
 
 if __name__ == "__main__":
     main()
