@@ -11,21 +11,44 @@ def analyze_bahr(poem):
             model="gpt-4",
             messages=[
                 {"role": "system", "content": """You are an expert in Arabic prosody (علم العروض). 
-                Analyze the following verse by:
-                1. Writing out the scansion (التقطيع العروضي)
-                2. Identifying the pattern of long and short syllables
-                3. Comparing with known Bahr patterns
-                4. Explaining your reasoning
+                Follow these EXACT steps to analyze the verse:
                 
-                Format your response as:
-                **Scansion:**
-                [Write the scansion here]
+                1. First, write the verse with complete diacritical marks (تشكيل)
                 
-                **Analysis:**
-                [Explain your thinking process]
+                2. Perform scansion (التقطيع العروضي):
+                   - Split into syllables using traditional symbols (٫)
+                   - Mark each syllable as sabab khafif (//), sabab thaqil (///), or watad majmoo (/0/)
+                   - Write complete taf'ilah units
+                
+                3. Compare with standard meters:
+                   الطويل: فعولن مفاعيلن فعولن مفاعلن (×٢)
+                   البسيط: مستفعلن فاعلن مستفعلن فاعلن (×٢)
+                   الوافر: مفاعلتن مفاعلتن فعولن (×٢)
+                   الكامل: متفاعلن متفاعلن متفاعلن (×٢)
+                   الرجز: مستفعلن مستفعلن مستفعلن (×٢)
+                   الرمل: فاعلاتن فاعلاتن فاعلاتن (×٢)
+                   السريع: مستفعلن مستفعلن مفعولات
+                   المنسرح: مستفعلن مفعولات مستفعلن
+                   الخفيف: فاعلاتن مستفعلن فاعلاتن
+                
+                Format your response EXACTLY as:
+                
+                **Original with Tashkeel:**
+                [Fully voweled verse]
+                
+                **Scansion Steps:**
+                1. Syllable division: [Show syllables separated by ٫]
+                2. Metrical units: [Mark each // /// /0/]
+                3. Taf'ilah breakdown: [Show complete taf'ilah units]
+                
+                **Pattern Matching:**
+                - Found pattern: [Write the complete metrical pattern]
+                - Matches standard: [Show which standard meter this matches]
                 
                 **Conclusion:**
                 [State the Bahr name in bold: **بحر name**]
+                
+                If NO exact match is found, analyze WHY it doesn't match and respond with 'NO_MATCH' with explanation.
                 
                 If the verse doesn't match any Bahr, explain why and respond with 'NO_MATCH'"""},
                 {"role": "user", "content": poem}
@@ -36,6 +59,36 @@ def analyze_bahr(poem):
     except Exception as e:
         st.error(f"Error analyzing Bahr: {e}")
         return None
+
+def validate_meter(text, claimed_bahr):
+    """Validate that the text actually matches the claimed meter"""
+    standard_patterns = {
+        "الطويل": "فعولن مفاعيلن فعولن مفاعلن",
+        "البسيط": "مستفعلن فاعلن مستفعلن فاعلن",
+        "الوافر": "مفاعلتن مفاعلتن فعولن",
+        "الكامل": "متفاعلن متفاعلن متفاعلن",
+        "الرجز": "مستفعلن مستفعلن مستفعلن",
+        "الرمل": "فاعلاتن فاعلاتن فاعلاتن",
+        "السريع": "مستفعلن مستفعلن مفعولات",
+        "المنسرح": "مستفعلن مفعولات مستفعلن",
+        "الخفيف": "فاعلاتن مستفعلن فاعلاتن"
+    }
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": f"""Verify if this text EXACTLY matches {claimed_bahr} meter.
+                Standard pattern: {standard_patterns.get(claimed_bahr, 'Unknown')}
+                
+                Return ONLY 'VALID' or 'INVALID' with one line explanation."""},
+                {"role": "user", "content": text}
+            ],
+            temperature=0.1
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return "INVALID: Validation error"
 
 def extract_bahr_from_analysis(analysis_text):
     """Extract just the Bahr name from the full analysis"""
@@ -55,11 +108,26 @@ def fit_to_bahr(poem, target_bahr):
             model="gpt-4",
             messages=[
                 {"role": "system", "content": f"""You are an expert in Arabic prosody (علم العروض). 
-                Modify the given verse to fit the {target_bahr} meter while:
-                1. Preserving the original meaning as much as possible
-                2. Maintaining classical Arabic language
-                3. Ensuring grammatical correctness
-                4. Keeping the rhyme scheme if possible
+                Follow these steps to modify the verse to fit {target_bahr}:
+                
+                1. First identify the current meter pattern (if any)
+                2. Map out the target meter pattern exactly:
+                   - For طويل: فعولن مفاعيلن فعولن مفاعلن (×٢)
+                   - For بسيط: مستفعلن فاعلن مستفعلن فاعلن (×٢)
+                   - For وافر: مفاعلتن مفاعلتن فعولن (×٢)
+                   - [etc. - use exact pattern needed]
+                
+                3. Modify the verse following these rules:
+                   - Maintain all core words (أسماء وأفعال) possible
+                   - Adjust word order to fit meter
+                   - Use synonyms of same root when needed
+                   - Modify only particles (حروف) when possible
+                   - Keep the same rhyme letter (رَوِيّ)
+                
+                4. Verify the new version by:
+                   - Writing complete diacritical marks
+                   - Checking syllable by syllable
+                   - Confirming exact match to meter
                 
                 Format your response as:
                 **Original:** [original verse]
