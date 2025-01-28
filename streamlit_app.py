@@ -6,21 +6,28 @@ class ArabicMeterAnalyzer:
     def __init__(self):
         self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
         self.short_vowels = set('\u064E\u064F\u0650')  # FATHA, DAMMA, KASRA
-        self.long_vowels = set('اوي')
+        self.long_vowels = set('ا')  # Only Alif is always a long vowel; و and ي are context-dependent
         self.sukun = '\u0652'  # ARABIC SUKUN
         self.shadda = '\u0651'  # ARABIC SHADDA
         self.tanwin = set('\u064B\u064C\u064D')  # FATHATAN, DAMMATAN, KASRATAN
+        self.tanwin_to_vowel = {
+            '\u064B': '\u064E',  # Fathatan → FATHA
+            '\u064C': '\u064F',  # Dammatan → DAMMA
+            '\u064D': '\u0650'   # Kasratan → KASRA
+        }
 
     def debug_char(self, c: str) -> str:
         """Return debug info for a character"""
-        if c in self.short_vowels:
+        if c in self.consonants:
+            return f"consonant({c})"
+        elif c in self.short_vowels:
             return f"short_vowel(U+{ord(c):04X})"
         elif c == self.sukun:
             return f"sukun(U+{ord(c):04X})"
         elif c in self.long_vowels:
             return f"long_vowel({c})"
-        elif c in self.consonants:
-            return f"consonant({c})"
+        elif c in self.tanwin:
+            return f"tanwin({c})"
         else:
             return f"other({c}:U+{ord(c):04X})"
 
@@ -29,49 +36,71 @@ class ArabicMeterAnalyzer:
         i = start
         debug_info = []
         
-        # Must start with consonant
-        if chars[i] not in self.consonants:
+        # Skip non-consonant starters
+        if i >= len(chars) or chars[i] not in self.consonants:
             return i + 1, None
             
         consonant = chars[i]
         debug_info.append(f"Found consonant: {consonant}")
         i += 1
         
-        # Must have short vowel
-        if i >= len(chars) or chars[i] not in self.short_vowels:
+        # Check for vowel (short vowel or tanwin)
+        if i >= len(chars):
             return i, None
             
-        vowel = chars[i]
-        debug_info.append(f"Found vowel: {vowel}")
-        i += 1
+        current_char = chars[i]
+        vowel = None
         
-        # Look ahead for syllable closure
-        syllable_type = 'V'  # Default to open syllable
-        end_char = ''
+        # Handle short vowels
+        if current_char in self.short_vowels:
+            vowel = current_char
+            debug_info.append(f"Found short vowel: {vowel}")
+            i += 1
+        # Handle tanwin as vowels
+        elif current_char in self.tanwin:
+            vowel = self.tanwin_to_vowel.get(current_char)
+            if not vowel:
+                return i, None
+            debug_info.append(f"Found tanwin {current_char} mapped to vowel {vowel}")
+            i += 1
+        else:
+            return i, None  # No valid vowel found
         
-        if i < len(chars):
+        # Determine syllable closure
+        syllable_type = 'V'  # Open syllable by default
+        end_chars = []
+        
+        # Check for closing characters
+        while i < len(chars):
+            # Check for sukun
             if chars[i] == self.sukun:
-                debug_info.append(f"Found sukun")
+                debug_info.append(f"Found sukun at {i}")
+                end_chars.append(chars[i])
                 syllable_type = 'S'
-                end_char = chars[i]
                 i += 1
+            # Check for long vowels (only Alif in this set)
             elif chars[i] in self.long_vowels:
-                debug_info.append(f"Found long vowel: {chars[i]}")
+                debug_info.append(f"Found long vowel {chars[i]} at {i}")
+                end_chars.append(chars[i])
                 syllable_type = 'S'
-                end_char = chars[i]
                 i += 1
-            elif chars[i] in self.tanwin:
-                debug_info.append(f"Found tanwin: {chars[i]}")
+            # Check for consonant with sukun
+            elif i+1 < len(chars) and chars[i] in self.consonants and chars[i+1] == self.sukun:
+                debug_info.append(f"Found consonant {chars[i]} with sukun at {i}")
+                end_chars.extend(chars[i:i+2])
                 syllable_type = 'S'
-                end_char = chars[i]
-                i += 1
-            elif chars[i] in self.consonants and i+1 < len(chars) and chars[i+1] == self.sukun:
-                debug_info.append(f"Found consonant+sukun: {chars[i]}{chars[i+1]}")
-                syllable_type = 'S'
-                end_char = chars[i] + chars[i+1]
                 i += 2
+            # Check for tanwin (already handled as vowels)
+            else:
+                break
+                
+        # Handle special case where tanwin implies closure
+        if current_char in self.tanwin:
+            debug_info.append("Tanwin implies syllable closure")
+            syllable_type = 'S'
+            end_chars.append(current_char)
         
-        syllable_text = consonant + vowel + end_char
+        syllable_text = consonant + (vowel if vowel else '') + ''.join(end_chars)
         return i, (syllable_text, syllable_type, ' | '.join(debug_info))
 
     def get_syllables(self, text: str) -> List[Tuple[str, str, str]]:
@@ -91,6 +120,7 @@ class ArabicMeterAnalyzer:
             new_i, syllable = self.analyze_syllable(chars, i)
             if syllable:
                 syllables.append(syllable)
+                st.write(f"Formed syllable: {syllable}")
             i = new_i
             
         return syllables
@@ -119,7 +149,16 @@ def main():
             st.write(f"Debug: {debug}")
         
         pattern = ''.join(p for _, p, _ in syllables)
-        feet = [pattern[i:i+4] for i in range(0, len(pattern), 4)]
+        # Improved foot division based on known meter patterns
+        feet = []
+        current_foot = []
+        for p in pattern:
+            current_foot.append(p)
+            if p == 'S' and len(current_foot) in [2, 4, 5]:
+                feet.append(''.join(current_foot))
+                current_foot = []
+        if current_foot:
+            feet.append(''.join(current_foot))
         
         st.write("\n### Final Pattern")
         st.write("Detected:", ' '.join(feet))
