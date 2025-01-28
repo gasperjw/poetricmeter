@@ -1,137 +1,95 @@
 import streamlit as st
-import re
-from typing import List, Tuple
 
-class ArabicMeterAnalyzer:
-    def __init__(self):
-        # Define the basic meters with their exact patterns
-        self.meters = {
-            'الطويل': 'فَعُولُنْ مَفَاعِيلُنْ فَعُولُنْ مَفَاعِلُنْ',
-            'المديد': 'فَاعِلَاتُنْ فَاعِلُنْ فَاعِلَاتُنْ',
-            'البسيط': 'مُسْتَفْعِلُنْ فَاعِلُنْ مُسْتَفْعِلُنْ فَاعِلُنْ',
-            'الوافر': 'مُفَاعَلَتُنْ مُفَاعَلَتُنْ فَعُولُنْ',
-            'الكامل': 'مُتَفَاعِلُنْ مُتَفَاعِلُنْ مُتَفَاعِلُنْ',
-            'الهزج': 'مَفَاعِيلُنْ مَفَاعِيلُنْ',
-            'الرجز': 'مُسْتَفْعِلُنْ مُسْتَفْعِلُنْ مُسْتَفْعِلُنْ',
-            'الرمل': 'فَاعِلَاتُنْ فَاعِلَاتُنْ فَاعِلَاتُنْ'
-        }
-        
-        # Diacritical marks we expect (excluding sukun)
-        self.diacritics = 'ًٌٍَُِّْ'
-        
-    def clean_line(self, text: str) -> str:
-        """Clean the input line and ensure it's properly formatted."""
-        # Remove any existing sukun marks
-        text = re.sub('ْ', '', text)
-        
-        # Remove multiple spaces and trim
-        text = re.sub(r'\s+', ' ', text).strip()
-        
-        # Split into words and join with single space
-        return ' '.join(text.split())
+# Define meters with their basic patterns
+METERS = {
+    'الطويل': 'VSVS VVSVS VSVS VVSVS',
+    'المديد': 'VSVVS VSV VSVVS',
+    'البسيط': 'VSSVS VSV VSSVS VSV',
+    'الوافر': 'VVSVS VVSVS VSV',
+    'الكامل': 'VVVVS VVVVS VVVVS',
+    'الهزج': 'VVSVS VVSVS',
+    'الرجز': 'VSSVS VSSVS VSSVS',
+    'الرمل': 'VSVVS VSVVS VSVVS',
+    'السريع': 'VSSVS VSSVS VSV',
+    'المنسرح': 'VSSVS VSVVS VSSVS',
+    'الخفيف': 'VSVVS VSSVS VSVVS',
+    'المضارع': 'VVSVS VSVVS',
+    'المقتضب': 'VSVVS VSSVS',
+    'المجتث': 'VSSVS VSVVS',
+    'المتقارب': 'VSVS VSVS VSVS VSVS',
+    'المتدارك': 'VSV VSV VSV VSV'
+}
 
-    def extract_pattern(self, text: str) -> str:
-        """Convert text to CV pattern (consonant-vowel pattern)."""
-        pattern = ''
-        prev_char = ''
-        
-        for char in text:
-            if char in self.diacritics:
-                if char in 'َُِ':  # Short vowels
-                    pattern += 'v'
-                elif char in 'ًٌٍّ':  # Double marks or shadda
-                    pattern += 'vv'
-            elif re.match('[ا-ي]', char):  # Arabic letters
-                if prev_char not in self.diacritics:
-                    pattern += 'c'
-            prev_char = char
-            
-        return pattern
-
-    def match_meter(self, pattern: str) -> List[Tuple[str, float]]:
-        """Find matching meters based on CV pattern."""
-        matches = []
-        
-        for meter_name, meter_text in self.meters.items():
-            meter_pattern = self.extract_pattern(meter_text)
-            similarity = self.calculate_similarity(pattern, meter_pattern)
-            if similarity > 0.85:  # Higher threshold for more accuracy
-                matches.append((meter_name, similarity))
-                
-        return sorted(matches, key=lambda x: x[1], reverse=True)
-
-    def calculate_similarity(self, pattern1: str, pattern2: str) -> float:
-        """Calculate similarity between two patterns."""
-        if not pattern1 or not pattern2:
-            return 0.0
-            
-        # Dynamic programming approach for sequence alignment
-        m, n = len(pattern1), len(pattern2)
-        dp = [[0] * (n + 1) for _ in range(m + 1)]
-        
-        for i in range(m + 1):
-            dp[i][0] = i
-        for j in range(n + 1):
-            dp[0][j] = j
-            
-        for i in range(1, m + 1):
-            for j in range(1, n + 1):
-                if pattern1[i-1] == pattern2[j-1]:
-                    dp[i][j] = dp[i-1][j-1]
-                else:
-                    dp[i][j] = 1 + min(dp[i-1][j],      # deletion
-                                     dp[i][j-1],         # insertion
-                                     dp[i][j-1])         # substitution
-                                     
-        max_len = max(m, n)
-        return 1 - (dp[m][n] / max_len)
+def find_meter(pattern: str) -> list:
+    """Find matching meters for a given pattern."""
+    matches = []
+    user_pattern = pattern.replace(' ', '')
+    
+    for meter, meter_pattern in METERS.items():
+        base_pattern = meter_pattern.replace(' ', '')
+        if user_pattern == base_pattern:
+            matches.append(meter)
+    
+    return matches
 
 def main():
-    st.title("Arabic Poetry Meter Analyzer محلل البحور الشعرية")
+    st.title("Arabic Meter Pattern Matcher محلل البحور الشعرية")
+    
     st.markdown("""
     ### Instructions التعليمات
-    1. Enter a **single line** of Arabic poetry
-    2. Make sure all diacritical marks are present (except sukun)
-    3. The line should be fully vowelized (مُشَكّل)
+    1. Mark each syllable in your line as:
+       - V (متحرك) for short syllables
+       - S (ساكن) for long syllables
+    2. Separate feet with spaces
+    
+    Example for الطويل (قفا نبك):
+    ```
+    VSVS VVSVS VSVS VVSVS
+    ```
     """)
-    
-    # Text input with clear placeholder showing required format
-    placeholder_text = "مُتَفَاعِلُنْ مُتَفَاعِلُنْ مُتَفَاعِلُنْ"
-    poetry_line = st.text_input(
-        "Enter your poetry line here:", 
-        placeholder=placeholder_text
-    )
-    
-    # Prevent multi-line input
-    if '\n' in poetry_line:
-        st.error("Please enter only one line of poetry")
-        return
+
+    # Example button
+    if st.button("Show me examples"):
+        st.markdown("""
+        Here are some examples:
         
-    analyzer = ArabicMeterAnalyzer()
-    
-    if st.button("Analyze التحليل"):
-        if poetry_line:
-            # Clean and process the line
-            cleaned_line = analyzer.clean_line(poetry_line)
-            pattern = analyzer.extract_pattern(cleaned_line)
+        1. قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيبٍ وَمَنْزِلِ (الطويل)
+        ```
+        VSVS VVSVS VSVS VVSVS
+        ```
+        
+        2. الشِّعْرُ دِيوَانُ العَرَب (الوافر)
+        ```
+        VVSVS VVSVS VSV
+        ```
+        """)
+
+    # Input for pattern
+    pattern = st.text_input(
+        "Enter the pattern:",
+        placeholder="VSVS VVSVS VSVS VVSVS"
+    ).upper()
+
+    if st.button("Find Meter"):
+        if not pattern:
+            st.error("Please enter a pattern")
+            return
             
-            # Find matches
-            matches = analyzer.match_meter(pattern)
+        # Validate input
+        if not all(c in 'VS ' for c in pattern):
+            st.error("Pattern should only contain V, S, and spaces")
+            return
             
-            if matches:
-                st.success("Meter identified! البحر المحدد")
-                for meter_name, confidence in matches[:2]:  # Show top 2 matches
-                    st.write(f"- {meter_name} ({confidence*100:.1f}%)")
-                    st.write(f"  Original pattern: {analyzer.meters[meter_name]}")
-                
-                # Debug information in expander
-                with st.expander("Show technical details"):
-                    st.write("Extracted pattern:", pattern)
-                    st.write("Cleaned text:", cleaned_line)
-            else:
-                st.warning("No matching meter found. Please check the vowelization.")
+        matches = find_meter(pattern)
+        
+        if matches:
+            st.success("Found matching meter(s)!")
+            for meter in matches:
+                st.write(f"- {meter}")
+                st.write(f"  Standard pattern: {METERS[meter]}")
         else:
-            st.error("Please enter a line of poetry")
+            st.warning("No exact match found. Double-check your pattern.")
+            st.info("Make sure you've marked all syllables correctly and included spaces between feet.")
 
 if __name__ == "__main__":
     main()
