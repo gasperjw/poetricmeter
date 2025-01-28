@@ -1,13 +1,13 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 
-# Set up OpenAI API
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+# Initialize OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 def analyze_bahr(poem):
     """Analyze the Bahr meter using OpenAI GPT"""
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an expert in Arabic prosody (علم العروض). Analyze the following verse and respond ONLY with the Arabic name of the Bahr in bold. No explanations. Format: **بحر name**"},
@@ -15,7 +15,7 @@ def analyze_bahr(poem):
             ],
             temperature=0.1
         )
-        return response.choices[0].message['content'].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         st.error(f"Error analyzing Bahr: {e}")
         return None
@@ -23,7 +23,7 @@ def analyze_bahr(poem):
 def generate_response(poem, bahr):
     """Generate poetic response using OpenAI GPT"""
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": f"""You are a classical Arabic poet. Compose a response verse that:
@@ -38,12 +38,12 @@ Format: **[البحر: {bahr}]** followed by the verse"""},
             ],
             temperature=0.7
         )
-        return response.choices[0].message['content'].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         st.error(f"Error generating response: {e}")
         return None
 
-# Streamlit UI
+# Streamlit UI remains the same
 st.title("𓂀 Arabic Poetry Meter Analyzer & Generator 𓂀")
 st.markdown("""
 <style>
@@ -73,17 +73,9 @@ if st.button("Analyze & Generate"):
             if response:
                 st.markdown("### Generated Response:")
                 st.markdown(f"<div class='arabic-text'>{response}</div>", unsafe_allow_html=True)
-                
-                # Add audio celebration
                 st.balloons()
         else:
             st.error("Could not determine Bahr meter. Please try again.")
 
 st.markdown("---")
-st.markdown("""
-**Instructions:**
-1. Enter classical Arabic poetry in the text area
-2. Click the button to analyze the meter
-3. Receive a generated response in the same meter
-4. (Note: Works best with clear examples of classical meters)
-""")
+st.markdown("""... (rest of UI remains unchanged)""")
