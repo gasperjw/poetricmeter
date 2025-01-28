@@ -1,151 +1,123 @@
 import streamlit as st
-import pandas as pd
-import math
-from pathlib import Path
+import re
+from typing import List, Dict, Tuple
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# Arabic meters with their patterns
+METERS = {
+    'الطويل': 'فعولن مفاعيلن فعولن مفاعيلن',
+    'المديد': 'فاعلاتن فاعلن فاعلاتن',
+    'البسيط': 'مستفعلن فاعلن مستفعلن فاعلن',
+    'الوافر': 'مفاعلتن مفاعلتن فعولن',
+    'الكامل': 'متفاعلن متفاعلن متفاعلن',
+    'الهزج': 'مفاعيلن مفاعيلن',
+    'الرجز': 'مستفعلن مستفعلن مستفعلن',
+    'الرمل': 'فاعلاتن فاعلاتن فاعلاتن',
+    'السريع': 'مستفعلن مستفعلن فاعلن',
+    'المنسرح': 'مستفعلن مفعولات مستفعلن',
+    'الخفيف': 'فاعلاتن مستفعلن فاعلاتن',
+    'المضارع': 'مفاعيلن فاعلاتن',
+    'المقتضب': 'مفعولات مستفعلن',
+    'المجتث': 'مستفعلن فاعلاتن',
+    'المتقارب': 'فعولن فعولن فعولن فعولن',
+    'المتدارك': 'فاعلن فاعلن فاعلن فاعلن'
+}
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+def is_arabic_letter(char: str) -> bool:
+    """Check if a character is an Arabic letter."""
+    return '\u0600' <= char <= '\u06FF'
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
+def get_syllable_pattern(text: str) -> str:
     """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
-
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+    Convert Arabic text to a pattern of moving (متحرك) and still (ساكن) syllables.
+    Returns a string where 'v' represents متحرك and 's' represents ساكن.
+    """
+    pattern = ''
+    i = 0
+    while i < len(text):
+        if not is_arabic_letter(text[i]):
+            i += 1
+            continue
+            
+        # Skip diacritics
+        while i + 1 < len(text) and not is_arabic_letter(text[i + 1]):
+            i += 1
+            
+        if i + 1 < len(text) and is_arabic_letter(text[i + 1]):
+            pattern += 'v'  # متحرك
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+            pattern += 's'  # ساكن
+        i += 1
+    return pattern
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+def convert_meter_to_pattern(meter: str) -> str:
+    """Convert a meter's taf'ilat to a syllable pattern."""
+    # Mapping of basic taf'ilat to their syllable patterns
+    TAFILAT_PATTERNS = {
+        'فعولن': 'vvs',
+        'مفاعيلن': 'vvsvs',
+        'فاعلاتن': 'vsvvs',
+        'فاعلن': 'vsvs',
+        'مستفعلن': 'ssvvs',
+        'مفاعلتن': 'vvsvs',
+        'متفاعلن': 'vvvvs',
+        'مفعولات': 'ssvvs'
+    }
+    
+    pattern = ''
+    for taf3ila in meter.split():
+        if taf3ila in TAFILAT_PATTERNS:
+            pattern += TAFILAT_PATTERNS[taf3ila]
+    return pattern
+
+def find_matching_meter(text_pattern: str) -> List[Tuple[str, float]]:
+    """
+    Find the matching meter for a given syllable pattern.
+    Returns a list of tuples containing (meter_name, similarity_score).
+    """
+    matches = []
+    
+    for meter_name, meter_pattern in METERS.items():
+        meter_syllable_pattern = convert_meter_to_pattern(meter_pattern)
+        
+        # Calculate similarity score
+        min_len = min(len(text_pattern), len(meter_syllable_pattern))
+        matching_chars = sum(1 for i in range(min_len) 
+                           if text_pattern[i] == meter_syllable_pattern[i])
+        similarity = matching_chars / max(len(text_pattern), len(meter_syllable_pattern))
+        
+        if similarity > 0.7:  # Threshold for considering it a match
+            matches.append((meter_name, similarity))
+    
+    return sorted(matches, key=lambda x: x[1], reverse=True)
+
+def main():
+    st.title("Arabic Poetry Meter Analyzer محلل البحور الشعرية")
+    st.write("Enter a line of Arabic poetry to identify its meter البحر الشعري")
+    
+    # Text input for the poetry line
+    poetry_line = st.text_area("Enter your poetry line here:", "")
+    
+    if st.button("Analyze"):
+        if poetry_line:
+            # Get the syllable pattern
+            pattern = get_syllable_pattern(poetry_line)
+            
+            # Find matching meters
+            matches = find_matching_meter(pattern)
+            
+            if matches:
+                st.success("Potential meters found!")
+                for meter_name, similarity in matches[:3]:  # Show top 3 matches
+                    confidence = similarity * 100
+                    st.write(f"- {meter_name} (Confidence: {confidence:.1f}%)")
+                    st.write(f"  Pattern: {METERS[meter_name]}")
+            else:
+                st.warning("No matching meter found. Please check the text or try another line.")
+                
+            # Show the analyzed pattern for debugging
+            st.write("Detected syllable pattern:", pattern)
+        else:
+            st.error("Please enter a line of poetry to analyze.")
+
+if __name__ == "__main__":
+    main()
