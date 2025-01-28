@@ -4,119 +4,99 @@ from typing import List, Tuple
 
 class ArabicMeterAnalyzer:
     def __init__(self):
-        # Use proper Unicode characters and straight quotes
         self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
         self.short_vowels = set('\u064E\u064F\u0650')  # FATHA, DAMMA, KASRA
         self.long_vowels = set('اوي')
         self.sukun = '\u0652'  # ARABIC SUKUN
         self.shadda = '\u0651'  # ARABIC SHADDA
         self.tanwin = set('\u064B\u064C\u064D')  # FATHATAN, DAMMATAN, KASRATAN
+
+    def debug_char(self, c: str) -> str:
+        """Return debug info for a character"""
+        if c in self.short_vowels:
+            return f"short_vowel(U+{ord(c):04X})"
+        elif c == self.sukun:
+            return f"sukun(U+{ord(c):04X})"
+        elif c in self.long_vowels:
+            return f"long_vowel({c})"
+        elif c in self.consonants:
+            return f"consonant({c})"
+        else:
+            return f"other({c}:U+{ord(c):04X})"
+
+    def analyze_syllable(self, chars: list, start: int) -> Tuple[int, Tuple[str, str, str]]:
+        """Analyze a single syllable starting at position start"""
+        i = start
+        debug_info = []
         
+        # Must start with consonant
+        if chars[i] not in self.consonants:
+            return i + 1, None
+            
+        consonant = chars[i]
+        debug_info.append(f"Found consonant: {consonant}")
+        i += 1
+        
+        # Must have short vowel
+        if i >= len(chars) or chars[i] not in self.short_vowels:
+            return i, None
+            
+        vowel = chars[i]
+        debug_info.append(f"Found vowel: {vowel}")
+        i += 1
+        
+        # Look ahead for syllable closure
+        syllable_type = 'V'  # Default to open syllable
+        end_char = ''
+        
+        if i < len(chars):
+            if chars[i] == self.sukun:
+                debug_info.append(f"Found sukun")
+                syllable_type = 'S'
+                end_char = chars[i]
+                i += 1
+            elif chars[i] in self.long_vowels:
+                debug_info.append(f"Found long vowel: {chars[i]}")
+                syllable_type = 'S'
+                end_char = chars[i]
+                i += 1
+            elif chars[i] in self.tanwin:
+                debug_info.append(f"Found tanwin: {chars[i]}")
+                syllable_type = 'S'
+                end_char = chars[i]
+                i += 1
+            elif chars[i] in self.consonants and i+1 < len(chars) and chars[i+1] == self.sukun:
+                debug_info.append(f"Found consonant+sukun: {chars[i]}{chars[i+1]}")
+                syllable_type = 'S'
+                end_char = chars[i] + chars[i+1]
+                i += 2
+        
+        syllable_text = consonant + vowel + end_char
+        return i, (syllable_text, syllable_type, ' | '.join(debug_info))
+
     def get_syllables(self, text: str) -> List[Tuple[str, str, str]]:
-        """Break text into syllables using strict Arabic prosody rules."""
+        """Break text into syllables with detailed debugging"""
         syllables = []
         chars = list(text)
         i = 0
         
-        st.write("Debug - Character codes:")
-        for c in text:
-            if c in self.short_vowels:
-                st.write(f"Short vowel: {c} (U+{ord(c):04X})")
-            elif c == self.sukun:
-                st.write(f"Sukun: {c} (U+{ord(c):04X})")
-            elif c == self.shadda:
-                st.write(f"Shadda: {c} (U+{ord(c):04X})")
-            elif c in self.tanwin:
-                st.write(f"Tanwin: {c} (U+{ord(c):04X})")
-        
+        st.write("### Character by character analysis:")
         while i < len(chars):
-            # Skip non-letters
-            if chars[i] not in self.consonants and chars[i] != ' ':
-                i += 1
-                continue
-                
-            # Skip spaces but note word boundary
+            st.write(f"Position {i}: {self.debug_char(chars[i])}")
+            
             if chars[i] == ' ':
                 i += 1
                 continue
+                
+            new_i, syllable = self.analyze_syllable(chars, i)
+            if syllable:
+                syllables.append(syllable)
+            i = new_i
             
-            start = i
-            # Find next consonant + vowel sequence
-            if chars[i] in self.consonants:
-                consonant = chars[i]
-                i += 1
-                
-                # Look for vowel
-                if i < len(chars) and chars[i] in self.short_vowels:
-                    vowel = chars[i]
-                    i += 1
-                    
-                    # Look ahead for syllable end
-                    is_closed = False
-                    if i < len(chars):
-                        # Case 1: Closed by sukun
-                        if chars[i] == self.sukun:
-                            syllables.append((
-                                ''.join(chars[start:i+1]),
-                                'S',
-                                f'CVC (sukun): {consonant}{vowel}{self.sukun}'
-                            ))
-                            is_closed = True
-                            i += 1
-                        
-                        # Case 2: Closed by long vowel
-                        elif chars[i] in self.long_vowels:
-                            syllables.append((
-                                ''.join(chars[start:i+1]),
-                                'S',
-                                f'CVV: {consonant}{vowel}{chars[i]}'
-                            ))
-                            is_closed = True
-                            i += 1
-                            
-                        # Case 3: Closed by tanwin
-                        elif chars[i] in self.tanwin:
-                            syllables.append((
-                                ''.join(chars[start:i+1]),
-                                'S',
-                                f'CVN: {consonant}{vowel}{chars[i]}'
-                            ))
-                            is_closed = True
-                            i += 1
-                            
-                        # Case 4: Next char is consonant + sukun
-                        elif (i+1 < len(chars) and chars[i] in self.consonants 
-                              and i+2 < len(chars) and chars[i+2] == self.sukun):
-                            syllables.append((
-                                ''.join(chars[start:i+2]),
-                                'S',
-                                f'CVCC: {consonant}{vowel}{chars[i]}{self.sukun}'
-                            ))
-                            is_closed = True
-                            i += 2
-                    
-                    # Open syllable if not closed
-                    if not is_closed:
-                        syllables.append((
-                            ''.join(chars[start:i]),
-                            'V',
-                            f'CV: {consonant}{vowel}'
-                        ))
-                
         return syllables
 
 def main():
     st.title("Arabic Meter Analyzer محلل البحور الشعرية")
-    
-    st.markdown("""
-    ### Test with:
-    قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِي
-    
-    Make sure to mark:
-    - Short vowels (َُِ)
-    - Sukun (ْ)
-    - Word boundaries (spaces)
-    """)
     
     text = st.text_input(
         "Enter Arabic poetry line:",
@@ -124,33 +104,26 @@ def main():
     )
     
     if st.button("Analyze"):
-        if not text:
-            st.error("Please enter text")
-            return
-            
         analyzer = ArabicMeterAnalyzer()
         
-        # Show character set info
-        st.write("Character Sets Used:")
-        st.write(f"Short vowels: {' '.join(analyzer.short_vowels)}")
-        st.write(f"Sukun: {analyzer.sukun}")
-        st.write(f"Shadda: {analyzer.shadda}")
-        st.write(f"Tanwin: {' '.join(analyzer.tanwin)}")
+        st.write("### Initial text analysis")
+        st.write("Text length:", len(text))
+        st.write("Characters:", [f"{c}(U+{ord(c):04X})" for c in text])
         
         syllables = analyzer.get_syllables(text)
         
-        # Display analysis
-        st.markdown("### Syllable Analysis تحليل المقاطع")
-        for syl, pat, reason in syllables:
-            st.write(f"{syl} ({pat}) - {reason}")
+        st.write("### Syllable Analysis")
+        for syl, pat, debug in syllables:
+            st.write(f"\nSyllable: {syl}")
+            st.write(f"Pattern: {pat}")
+            st.write(f"Debug: {debug}")
         
-        # Generate pattern
         pattern = ''.join(p for _, p, _ in syllables)
         feet = [pattern[i:i+4] for i in range(0, len(pattern), 4)]
         
-        st.markdown("### Complete Pattern Analysis")
+        st.write("\n### Final Pattern")
         st.write("Detected:", ' '.join(feet))
-        st.write("Expected (الطويل):", "VSVS VVSVS VSVS VVSVS")
+        st.write("Expected:", "VSVS VVSVS VSVS VVSVS")
 
 if __name__ == "__main__":
     main()
