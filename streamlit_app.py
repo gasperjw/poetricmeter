@@ -5,12 +5,29 @@ from openai import OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 def analyze_bahr(poem):
-    """Analyze the Bahr meter using OpenAI GPT"""
+    """Analyze the Bahr meter using OpenAI GPT with explicit thinking process"""
     try:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are an expert in Arabic prosody (علم العروض). Analyze the following verse and think it out then respond with the Arabic name of the Bahr in bold. If the verse doesn't match any Bahr, respond with 'NO_MATCH'. Format: **بحر name** or NO_MATCH"},
+                {"role": "system", "content": """You are an expert in Arabic prosody (علم العروض). 
+                Analyze the following verse by:
+                1. Writing out the scansion (التقطيع العروضي)
+                2. Identifying the pattern of long and short syllables
+                3. Comparing with known Bahr patterns
+                4. Explaining your reasoning
+                
+                Format your response as:
+                **Scansion:**
+                [Write the scansion here]
+                
+                **Analysis:**
+                [Explain your thinking process]
+                
+                **Conclusion:**
+                [State the Bahr name in bold: **بحر name**]
+                
+                If the verse doesn't match any Bahr, explain why and respond with 'NO_MATCH'"""},
                 {"role": "user", "content": poem}
             ],
             temperature=0.1
@@ -19,6 +36,17 @@ def analyze_bahr(poem):
     except Exception as e:
         st.error(f"Error analyzing Bahr: {e}")
         return None
+
+def extract_bahr_from_analysis(analysis_text):
+    """Extract just the Bahr name from the full analysis"""
+    if "NO_MATCH" in analysis_text:
+        return "NO_MATCH"
+    # Look for the Bahr name between ** marks in the Conclusion section
+    import re
+    match = re.search(r'\*\*(بحر [^*]+)\*\*', analysis_text)
+    if match:
+        return match.group(1)
+    return None
 
 def fit_to_bahr(poem, target_bahr):
     """Attempt to modify the poem to fit the specified Bahr"""
@@ -35,7 +63,11 @@ def fit_to_bahr(poem, target_bahr):
                 
                 Format your response as:
                 **Original:** [original verse]
+                **Modification Process:**
+                [Explain your modifications]
                 **Modified:** [modified verse]
+                **Scansion of Modified Verse:**
+                [Show the scansion]
                 """},
                 {"role": "user", "content": poem}
             ],
@@ -62,8 +94,18 @@ def generate_response(poem, bahr, original_bahr=None):
                 3. Uses classical Arabic language
                 4. Rhymes appropriately
                 5. Is grammatically correct
-                {context}
-                Format: **[البحر: {bahr}]** followed by the verse"""},
+                
+                Format your response as:
+                **Composition Process:**
+                [Explain your thinking]
+                
+                **Response Verse:**
+                [The verse]
+                
+                **Scansion:**
+                [Show the scansion]
+                
+                {context}"""},
                 {"role": "user", "content": poem}
             ],
             temperature=0.7
@@ -82,6 +124,10 @@ st.markdown("""
     text-align: right;
     direction: rtl;
 }
+.analysis-text {
+    font-size: 16px;
+    white-space: pre-wrap;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -96,7 +142,12 @@ if st.button("Analyze & Generate"):
         st.error("Please enter some Arabic poetry")
     else:
         with st.spinner("🔍 Analyzing Bahr Meter..."):
-            original_bahr = analyze_bahr(poem_input)
+            full_analysis = analyze_bahr(poem_input)
+            if full_analysis:
+                st.markdown("### Meter Analysis:")
+                st.markdown(f"<div class='analysis-text'>{full_analysis}</div>", unsafe_allow_html=True)
+                
+                original_bahr = extract_bahr_from_analysis(full_analysis)
             
         if original_bahr == "NO_MATCH" or (preferred_bahr != "None" and original_bahr != preferred_bahr):
             target_bahr = preferred_bahr if preferred_bahr != "None" else "الطويل"  # Default to Taweel if no preference
@@ -107,26 +158,31 @@ if st.button("Analyze & Generate"):
                 
             if modified_result:
                 st.markdown("### Modified Poetry:")
-                st.markdown(f"<div class='arabic-text'>{modified_result}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='analysis-text'>{modified_result}</div>", unsafe_allow_html=True)
                 
                 # Extract modified poem for response generation
-                modified_poem = modified_result.split("**Modified:**")[-1].strip()
+                modified_lines = modified_result.split('\n')
+                modified_poem = None
+                for line in modified_lines:
+                    if line.startswith("**Modified:**"):
+                        modified_poem = line.replace("**Modified:**", "").strip()
+                        break
                 
-                with st.spinner("🖋 Composing Response..."):
-                    response = generate_response(modified_poem, target_bahr, original_bahr)
+                if modified_poem:
+                    with st.spinner("🖋 Composing Response..."):
+                        response = generate_response(modified_poem, target_bahr, original_bahr)
+                else:
+                    st.error("Could not extract modified poem. Please try again.")
             else:
                 st.error("Could not modify the poem to fit the meter. Please try different poetry.")
                 
         elif original_bahr:
-            st.markdown(f"### Detected Meter: \n<div class='arabic-text'>{original_bahr}</div>", 
-                       unsafe_allow_html=True)
-            
             with st.spinner("🖋 Composing Response..."):
                 response = generate_response(poem_input, original_bahr)
                 
         if response:
             st.markdown("### Response:")
-            st.markdown(f"<div class='arabic-text'>{response}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='analysis-text'>{response}</div>", unsafe_allow_html=True)
             st.balloons()
         else:
             st.error("Could not generate response. Please try again.")
@@ -134,13 +190,13 @@ if st.button("Analyze & Generate"):
 st.markdown("---")
 st.markdown("""
 ### About
-This app analyzes Arabic poetry meter (Bahr) and generates matching responses. If the input doesn't match the desired meter, 
-it attempts to modify the poetry while preserving meaning.
+This app analyzes Arabic poetry meter (Bahr) and generates matching responses. It provides detailed analysis of the meter detection process and shows the thinking behind modifications and responses.
 
 ### Features
-- Detects Arabic poetry meter (Bahr)
+- Detailed meter analysis with scansion
+- Explanation of thinking process
 - Optional preferred meter selection
-- Automatic meter fitting
-- Generates matching poetic responses
+- Detailed modification process
+- Generation of matching responses with explanation
 - Preserves meaning and classical style
 """)
