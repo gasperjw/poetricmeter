@@ -4,18 +4,30 @@ from typing import List, Tuple
 
 class ArabicMeterAnalyzer:
     def __init__(self):
+        # Use proper Unicode characters and straight quotes
         self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
-        self.short_vowels = set('َُِ')
+        self.short_vowels = set('\u064E\u064F\u0650')  # FATHA, DAMMA, KASRA
         self.long_vowels = set('اوي')
-        self.sukun = 'ْ'
-        self.shadda = 'ّ'
-        self.tanwin = set('ًٌٍ')
-
+        self.sukun = '\u0652'  # ARABIC SUKUN
+        self.shadda = '\u0651'  # ARABIC SHADDA
+        self.tanwin = set('\u064B\u064C\u064D')  # FATHATAN, DAMMATAN, KASRATAN
+        
     def get_syllables(self, text: str) -> List[Tuple[str, str, str]]:
         """Break text into syllables using strict Arabic prosody rules."""
         syllables = []
         chars = list(text)
         i = 0
+        
+        st.write("Debug - Character codes:")
+        for c in text:
+            if c in self.short_vowels:
+                st.write(f"Short vowel: {c} (U+{ord(c):04X})")
+            elif c == self.sukun:
+                st.write(f"Sukun: {c} (U+{ord(c):04X})")
+            elif c == self.shadda:
+                st.write(f"Shadda: {c} (U+{ord(c):04X})")
+            elif c in self.tanwin:
+                st.write(f"Tanwin: {c} (U+{ord(c):04X})")
         
         while i < len(chars):
             # Skip non-letters
@@ -47,7 +59,7 @@ class ArabicMeterAnalyzer:
                             syllables.append((
                                 ''.join(chars[start:i+1]),
                                 'S',
-                                f'CVC (sukun): {consonant}{vowel}ْ'
+                                f'CVC (sukun): {consonant}{vowel}{self.sukun}'
                             ))
                             is_closed = True
                             i += 1
@@ -78,7 +90,7 @@ class ArabicMeterAnalyzer:
                             syllables.append((
                                 ''.join(chars[start:i+2]),
                                 'S',
-                                f'CVCC: {consonant}{vowel}{chars[i]}ْ'
+                                f'CVCC: {consonant}{vowel}{chars[i]}{self.sukun}'
                             ))
                             is_closed = True
                             i += 2
@@ -101,8 +113,8 @@ def main():
     قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِي
     
     Make sure to mark:
-    - All short vowels (حركات: َُِ)
-    - All sukun (سكون: ْ)
+    - Short vowels (َُِ)
+    - Sukun (ْ)
     - Word boundaries (spaces)
     """)
     
@@ -117,35 +129,28 @@ def main():
             return
             
         analyzer = ArabicMeterAnalyzer()
+        
+        # Show character set info
+        st.write("Character Sets Used:")
+        st.write(f"Short vowels: {' '.join(analyzer.short_vowels)}")
+        st.write(f"Sukun: {analyzer.sukun}")
+        st.write(f"Shadda: {analyzer.shadda}")
+        st.write(f"Tanwin: {' '.join(analyzer.tanwin)}")
+        
         syllables = analyzer.get_syllables(text)
         
         # Display analysis
         st.markdown("### Syllable Analysis تحليل المقاطع")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Raw syllables:")
-            for syl, pat, reason in syllables:
-                st.write(f"{syl} ({pat})")
-        
-        with col2:
-            st.markdown("#### Pattern details:")
-            for syl, pat, reason in syllables:
-                st.write(f"{reason}")
+        for syl, pat, reason in syllables:
+            st.write(f"{syl} ({pat}) - {reason}")
         
         # Generate pattern
         pattern = ''.join(p for _, p, _ in syllables)
         feet = [pattern[i:i+4] for i in range(0, len(pattern), 4)]
         
         st.markdown("### Complete Pattern Analysis")
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            st.markdown("#### Detected:")
-            st.write(' '.join(feet))
-            
-        with col4:
-            st.markdown("#### Expected (الطويل):")
-            st.write("VSVS VVSVS VSVS VVSVS")
+        st.write("Detected:", ' '.join(feet))
+        st.write("Expected (الطويل):", "VSVS VVSVS VSVS VVSVS")
 
 if __name__ == "__main__":
     main()
