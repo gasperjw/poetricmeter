@@ -4,142 +4,148 @@ from typing import List, Tuple
 
 class ArabicMeterAnalyzer:
     def __init__(self):
-        # Character sets
         self.consonants = set('ءابتثجحخدذرزسشصضطظعغفقكلمنهوي')
-        self.short_vowels = set('َُِ')      # Fatha, Damma, Kasra
-        self.long_vowels = set('اوي')       # Alif, Waw, Ya
+        self.short_vowels = set('َُِ')
+        self.long_vowels = set('اوي')
         self.sukun = 'ْ'
         self.shadda = 'ّ'
         self.tanwin = set('ًٌٍ')
-        
+
     def get_syllables(self, text: str) -> List[Tuple[str, str, str]]:
-        """
-        Break text into syllables, following Arabic prosody rules strictly.
-        Each syllable must start with a consonant + vowel.
-        """
+        """Break text into syllables using strict Arabic prosody rules."""
         syllables = []
-        chars = list(text)  # Convert to list for easier handling
+        chars = list(text)
         i = 0
         
         while i < len(chars):
-            # Skip non-consonants at start
-            if chars[i] not in self.consonants:
+            # Skip non-letters
+            if chars[i] not in self.consonants and chars[i] != ' ':
+                i += 1
+                continue
+                
+            # Skip spaces but note word boundary
+            if chars[i] == ' ':
                 i += 1
                 continue
             
             start = i
-            consonant = chars[i]
-            i += 1
-            
-            # Look for vowel
-            if i < len(chars) and chars[i] in self.short_vowels:
-                vowel = chars[i]
+            # Find next consonant + vowel sequence
+            if chars[i] in self.consonants:
+                consonant = chars[i]
                 i += 1
                 
-                # Now check what closes the syllable
-                if i < len(chars):
-                    if chars[i] in self.long_vowels:  # CVV like فا
-                        syllables.append((
-                            ''.join(chars[start:i+1]),
-                            'S',
-                            f'CVV: {consonant}{vowel}{chars[i]}'
-                        ))
-                        i += 1
-                    elif chars[i] == self.sukun:  # CVC like مِنْ
-                        syllables.append((
-                            ''.join(chars[start:i+1]),
-                            'S',
-                            f'CVC: {consonant}{vowel}{self.sukun}'
-                        ))
-                        i += 1
-                    elif chars[i] in self.tanwin:  # CVN like بٍ
-                        syllables.append((
-                            ''.join(chars[start:i+1]),
-                            'S',
-                            f'CVN: {consonant}{vowel}{chars[i]}'
-                        ))
-                        i += 1
-                    elif chars[i] == self.shadda:  # CVCC like شَدّ
-                        syllables.append((
-                            ''.join(chars[start:i+1]),
-                            'S',
-                            f'CVCC: {consonant}{vowel}{self.shadda}'
-                        ))
-                        i += 1
-                    else:  # CV like بِ
+                # Look for vowel
+                if i < len(chars) and chars[i] in self.short_vowels:
+                    vowel = chars[i]
+                    i += 1
+                    
+                    # Look ahead for syllable end
+                    is_closed = False
+                    if i < len(chars):
+                        # Case 1: Closed by sukun
+                        if chars[i] == self.sukun:
+                            syllables.append((
+                                ''.join(chars[start:i+1]),
+                                'S',
+                                f'CVC (sukun): {consonant}{vowel}ْ'
+                            ))
+                            is_closed = True
+                            i += 1
+                        
+                        # Case 2: Closed by long vowel
+                        elif chars[i] in self.long_vowels:
+                            syllables.append((
+                                ''.join(chars[start:i+1]),
+                                'S',
+                                f'CVV: {consonant}{vowel}{chars[i]}'
+                            ))
+                            is_closed = True
+                            i += 1
+                            
+                        # Case 3: Closed by tanwin
+                        elif chars[i] in self.tanwin:
+                            syllables.append((
+                                ''.join(chars[start:i+1]),
+                                'S',
+                                f'CVN: {consonant}{vowel}{chars[i]}'
+                            ))
+                            is_closed = True
+                            i += 1
+                            
+                        # Case 4: Next char is consonant + sukun
+                        elif (i+1 < len(chars) and chars[i] in self.consonants 
+                              and i+2 < len(chars) and chars[i+2] == self.sukun):
+                            syllables.append((
+                                ''.join(chars[start:i+2]),
+                                'S',
+                                f'CVCC: {consonant}{vowel}{chars[i]}ْ'
+                            ))
+                            is_closed = True
+                            i += 2
+                    
+                    # Open syllable if not closed
+                    if not is_closed:
                         syllables.append((
                             ''.join(chars[start:i]),
                             'V',
                             f'CV: {consonant}{vowel}'
                         ))
-                else:  # End of text
-                    syllables.append((
-                        ''.join(chars[start:i]),
-                        'V',
-                        f'CV: {consonant}{vowel}'
-                    ))
-                    
+                
         return syllables
 
 def main():
     st.title("Arabic Meter Analyzer محلل البحور الشعرية")
     
-    example = "قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِ"
+    st.markdown("""
+    ### Test with:
+    قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِي
     
-    st.markdown(f"""
-    ### Instructions التعليمات
-    Each syllable must include:
-    - Consonant (حرف صحيح)
-    - Short vowel (حركة: َُِ)
-    - Optional ending: long vowel (ا و ي) / sukun (ْ) / tanwin (ًٌٍ)
-    
-    Test line:
-    {example}
+    Make sure to mark:
+    - All short vowels (حركات: َُِ)
+    - All sukun (سكون: ْ)
+    - Word boundaries (spaces)
     """)
     
-    # Text input
     text = st.text_input(
         "Enter Arabic poetry line:",
-        value=example
+        value="قِفَا نَبْكِ مِنْ ذِكْرَى حَبِيْبٍ وَمَنْزِلِي"
     )
-    
-    analyzer = ArabicMeterAnalyzer()
     
     if st.button("Analyze"):
         if not text:
             st.error("Please enter text")
             return
-        
-        # Analyze syllables
+            
+        analyzer = ArabicMeterAnalyzer()
         syllables = analyzer.get_syllables(text)
         
-        # Show analysis in table
+        # Display analysis
         st.markdown("### Syllable Analysis تحليل المقاطع")
-        st.markdown("| Syllable | Pattern | Type |")
-        st.markdown("|----------|---------|------|")
-        for syl, pat, reason in syllables:
-            st.markdown(f"| {syl} | {pat} | {reason} |")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Raw syllables:")
+            for syl, pat, reason in syllables:
+                st.write(f"{syl} ({pat})")
         
-        # Show pattern
+        with col2:
+            st.markdown("#### Pattern details:")
+            for syl, pat, reason in syllables:
+                st.write(f"{reason}")
+        
+        # Generate pattern
         pattern = ''.join(p for _, p, _ in syllables)
+        feet = [pattern[i:i+4] for i in range(0, len(pattern), 4)]
         
-        # Group into feet (every 2 syllables for taf'ilat)
-        feet = []
-        for i in range(0, len(pattern), 4):
-            feet.append(pattern[i:i+4])
-        segmented_pattern = ' '.join(feet)
+        st.markdown("### Complete Pattern Analysis")
+        col3, col4 = st.columns(2)
         
-        st.markdown("### Detected Pattern النمط المكتشف")
-        st.write(segmented_pattern)
-        
-        # Compare with expected
-        st.markdown("### Expected Pattern (الطويل)")
-        st.write("VSVS VVSVS VSVS VVSVS")
-        
-        # Detailed breakdown
-        st.markdown("### Foot Analysis تحليل التفعيلات")
-        for i, foot in enumerate(feet, 1):
-            st.write(f"Foot {i}: {foot}")
+        with col3:
+            st.markdown("#### Detected:")
+            st.write(' '.join(feet))
+            
+        with col4:
+            st.markdown("#### Expected (الطويل):")
+            st.write("VSVS VVSVS VSVS VVSVS")
 
 if __name__ == "__main__":
     main()
